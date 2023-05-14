@@ -1,0 +1,13 @@
+[Unit]
+Description=mutesync linux - enable mutesync functionality on linux
+Documentation=https://github.com/paullessing/mutesync-linux
+After=network.target
+
+[Service]
+Type=simple
+#User=ubuntu
+ExecStart=/home/paul/workspace/mutesync/run.js
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
