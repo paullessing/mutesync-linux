@@ -1,9 +1,34 @@
-import { Server } from "socket.io";
+import { Server, Socket } from 'socket.io';
+
+export type MuteStatus = 'muted' | 'unmuted' | 'disabled';
+
+interface MuteStatusUpdate {
+  data: `chromeMute:${MuteStatus},chromeVideo:${MuteStatus}`;
+  id: unknown; // null
+}
+interface MuteToggledResponse {
+  data: 'done';
+  id: unknown; // null
+}
+
+export type MuteListener = (status: MuteStatus) => void;
 
 export class WebsocketServer {
   private server: Server | null = null;
+  private muteListeners: Set<MuteListener> = new Set();
+  private connectedSockets: Set<Socket> = new Set();
 
-  constructor() {
+  public addMuteListener(listener: MuteListener): void {
+    this.muteListeners.add(listener);
+  }
+
+  public toggleMute(onSuccess?: () => void): void {
+    for (const socket of this.connectedSockets) {
+      socket.once('muteStatusToggled', () => {
+        onSuccess?.();
+      });
+      socket.emit('toggleMuteStatus', {});
+    }
   }
 
   public start(): void {
@@ -12,14 +37,23 @@ export class WebsocketServer {
     }
     this.server = new Server(8249);
 
-    this.server.on("connection", (socket) => {
+    this.server.on('connection', (socket) => {
       console.log('connected');
+
+      this.connectedSockets.add(socket);
 
       setInterval(() => {
         socket.emit('getMuteStatus', {});
       }, 2000);
 
-      socket.on('muteStatus', ({ data }) => {
+      socket.on('disconnect', () => {
+        for (const listener of this.muteListeners) {
+          listener('disabled');
+        }
+        this.connectedSockets.delete(socket);
+      });
+
+      socket.on('muteStatus', ({ data }: MuteStatusUpdate) => {
         // console.log('mute status', data);
 
         const match = data.match(/chromeMute:(muted|unmuted|disabled)/);
@@ -28,18 +62,10 @@ export class WebsocketServer {
           return;
         }
 
-        switch (match[1]) {
-          case 'muted':
-            console.log('Microphone is muted');
-            break;
-          case 'unmuted':
-            console.log('Microphone is unmuted');
-            break;
-          case 'disabled':
-            console.log('Call is disconnected');
-            break;
-          default:
-            throw new Error('Unexpected mute status match: ' + match[1]);
+        const status = ensureStatus(match[1]);
+
+        for (const listener of this.muteListeners) {
+          listener(status);
         }
 
         // ["muteStatus",{"data":"chromeMute:muted,chromeVideo:disabled,","id":null}]
@@ -56,6 +82,11 @@ export class WebsocketServer {
   }
 }
 
-// export default new WebsocketServer();
+function ensureStatus(value: string): MuteStatus {
+  if (['muted', 'unmuted', 'disabled'].includes(value)) {
+    return value as MuteStatus;
+  }
+  throw new Error('Unexpected mute status: ' + value);
+}
 
-new WebsocketServer().start();
+export default new WebsocketServer();

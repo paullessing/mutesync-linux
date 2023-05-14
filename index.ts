@@ -1,52 +1,119 @@
 import { SerialPort } from 'serialport';
+import server, { MuteStatus } from './server';
+import { Color, parseHexToNumbers } from './colors';
 
 const BUTTON_DOWN = 0x33;
 const BUTTON_UP = 0x34;
 
-type HexColor = `#${string}`;
+const Colors = {
+  RED: parseHexToNumbers('#ff0000').brightness(0.4),
+  GREEN: parseHexToNumbers('#00ff00').brightness(0.4),
+  BLACK: parseHexToNumbers('#000000'),
+};
 
-function getColorCommand(red: number, green: number, blue: number) {
-  const data = new Uint8Array(16);
-  data[0] = 0x41;
-  function split(value: number): [number, number] {
-    return [Math.floor(value / 16) % 16, value % 16];
-  }
+const StatusColors = {
+  MUTED: Colors.RED,
+  UNMUTED: Colors.GREEN,
+  OFF: Colors.BLACK,
+} as const;
 
-  let index = 1;
-  for (let i = 0; i < 5; i++) {
-    data[index++] = red;
-    data[index++] = green;
-    data[index++] = blue;
-  }
-
-  return Buffer.from(data);
-}
-
-const server = new SerialPort({
+const serialPort = new SerialPort({
   baudRate: 9600,
   path: '/dev/ttyUSB0',
 });
 
-server.on('open', () => {
-  console.log('port opened');
-  server.on('data', (data: Buffer) => {
-    console.log('Data received', data.toString());
+serialPort.on('open', () => {
+  console.log('Serial port connected');
 
-    if (data[0] === BUTTON_DOWN) {
-      console.log('down');
+  let currentColor: Color = Colors.BLACK;
+  let currentStatus: MuteStatus = 'disabled';
 
-      server.write(getColorCommand(255, 255, 255));
-    }
+  setInterval(() => {
+    serialPort.write(getColorCommand(currentColor));
+  }, 200);
+
+  server.addMuteListener((status) => {
+    setStatus(status);
+  });
+  server.start();
+
+  serialPort.on('data', (data: Buffer) => {
     if (data[0] === BUTTON_UP) {
-      console.log('up');
-
-      server.write(
-        getColorCommand(
-          Math.floor(Math.random() * 256),
-          Math.floor(Math.random() * 256),
-          Math.floor(Math.random() * 256)
-        )
-      );
+      server.toggleMute(toggleStatus);
     }
   });
+
+  function setStatus(status: MuteStatus) {
+    currentStatus = status;
+
+    try {
+      currentColor = getColorFromStatus(status);
+      serialPort.write(getColorCommand(currentColor));
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  function toggleStatus() {
+    switch (currentStatus) {
+      case 'muted':
+        setStatus('unmuted');
+        break;
+      case 'unmuted':
+        setStatus('muted');
+        break;
+      default:
+      // Do nothing
+    }
+  }
+
+  function getColorFromStatus(status: MuteStatus): Color {
+    switch (status) {
+      case 'muted':
+        return StatusColors.MUTED;
+      case 'unmuted':
+        return StatusColors.UNMUTED;
+      case 'disabled':
+        return StatusColors.OFF;
+      default:
+        throw new Error('Unexpected status when determining color: ' + status);
+    }
+  }
+
+  function getColorCommand({ red, green, blue }: Color) {
+    const data = new Uint8Array(16);
+    data[0] = 0x41;
+    function split(value: number): [number, number] {
+      return [Math.floor(value / 16) % 16, value % 16];
+    }
+
+    let index = 1;
+    for (let i = 0; i < 5; i++) {
+      data[index++] = red;
+      data[index++] = green;
+      data[index++] = blue;
+    }
+
+    return Buffer.from(data);
+  }
+});
+
+serialPort.on('error', (e) => {
+  if (!e.message.includes('cannot open')) {
+    console.error('Serial port error', e.message);
+  }
+
+  setTimeout(() => {
+    serialPort.open();
+  }, 1000);
+});
+
+serialPort.on('close', () => {
+  console.log('Disconnected from serial port');
+
+  // Closed is usually because the device was unplugged.
+  // Try again in 1s.
+  setTimeout(() => {
+    serialPort.open();
+  }, 1000);
 });

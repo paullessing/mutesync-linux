@@ -1,7 +1,18 @@
 {
+  "name": "mutesync-linux",
+  "version": "1.0.0",
+  "author": {
+    "name": "Paul Lessing",
+    "email": "paul@paullessing.com",
+    "url": "paullessing.com"
+  },
+  "scripts": {
+  },
   "dependencies": {
     "serialport": "^11.0.0",
-    "socket.io": "^4.6.1",
+    "socket.io": "^4.6.1"
+  },
+  "devDependencies": {
     "ts-node": "^10.9.1",
     "typescript": "^5.0.4"
   },
