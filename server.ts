@@ -16,7 +16,7 @@ export type MuteListener = (status: MuteStatus) => void;
 export class WebsocketServer {
   private server: Server | null = null;
   private muteListeners: Set<MuteListener> = new Set();
-  private connectedSockets: Set<Socket> = new Set();
+  private connectedSockets: Socket[] = [];
 
   public addMuteListener(listener: MuteListener): void {
     this.muteListeners.add(listener);
@@ -41,48 +41,60 @@ export class WebsocketServer {
     }
     this.server = new Server(8249);
 
+    setInterval(() => {
+      const latestSocket = this.connectedSockets[0];
+      if (latestSocket) {
+        latestSocket.emit('getMuteStatus', {});
+      }
+    }, 2000);
+
     this.server.on('connection', (socket) => {
-      console.log('connected');
+      this.onSocketConnected(socket);
+    });
+  }
 
-      this.connectedSockets.add(socket);
+  private onSocketConnected(socket: Socket): void {
+    if (this.connectedSockets.includes(socket)) {
+      return;
+    }
+    this.connectedSockets.unshift(socket);
 
-      setInterval(() => {
-        socket.emit('getMuteStatus', {});
-      }, 2000);
-
-      socket.on('disconnect', () => {
+    socket.on('disconnect', () => {
+      this.connectedSockets = this.connectedSockets.filter(
+        (_socket) => _socket !== socket
+      );
+      if (!this.connectedSockets.length) {
         for (const listener of this.muteListeners) {
           listener('disabled');
         }
-        this.connectedSockets.delete(socket);
-      });
-
-      socket.on('muteStatus', ({ data }: MuteStatusUpdate) => {
-        // console.log('mute status', data);
-
-        const match = data.match(/chromeMute:(muted|unmuted|disabled)/);
-        if (!match) {
-          console.error('Unexpected status', data);
-          return;
-        }
-
-        const status = ensureStatus(match[1]);
-
-        for (const listener of this.muteListeners) {
-          listener(status);
-        }
-
-        // ["muteStatus",{"data":"chromeMute:muted,chromeVideo:disabled,","id":null}]
-        // ["muteStatus",{"data":"chromeMute:unmuted,chromeVideo:disabled,","id":null}]
-        // offline
-        // ["muteStatus",{"data":"chromeMute:disabled,chromeVideo:disabled,","id":null}]
-      });
-
-      // Toggle request
-      // ["toggleMuteStatus",{}]
-      // Toggle response
-      // ["muteStatusToggled",{"data":"done","id":null}]
+      }
     });
+
+    socket.on('muteStatus', ({ data }: MuteStatusUpdate) => {
+      // console.log('mute status', data);
+
+      const match = data.match(/chromeMute:(muted|unmuted|disabled)/);
+      if (!match) {
+        console.error('Unexpected status', data);
+        return;
+      }
+
+      const status = ensureStatus(match[1]);
+
+      for (const listener of this.muteListeners) {
+        listener(status);
+      }
+
+      // ["muteStatus",{"data":"chromeMute:muted,chromeVideo:disabled,","id":null}]
+      // ["muteStatus",{"data":"chromeMute:unmuted,chromeVideo:disabled,","id":null}]
+      // offline
+      // ["muteStatus",{"data":"chromeMute:disabled,chromeVideo:disabled,","id":null}]
+    });
+
+    // Toggle request
+    // ["toggleMuteStatus",{}]
+    // Toggle response
+    // ["muteStatusToggled",{"data":"done","id":null}]
   }
 }
 

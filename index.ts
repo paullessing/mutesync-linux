@@ -4,6 +4,8 @@ import { SerialPort } from 'serialport';
 import server, { MuteStatus } from './server';
 import { Color, parseHexToNumbers } from './colors';
 
+const SERIAL_UPDATE_RATE_MS = 200;
+
 const BUTTON_DOWN = 0x33;
 const BUTTON_UP = 0x34;
 
@@ -37,7 +39,7 @@ serialPort.on('open', async () => {
   server.clearListeners();
   await runStartupAnimation();
 
-  setInterval(() => writeColor(currentColor), 200);
+  setInterval(() => writeColor(currentColor), SERIAL_UPDATE_RATE_MS);
 
   server.addMuteListener((status) => {
     setStatus(status);
