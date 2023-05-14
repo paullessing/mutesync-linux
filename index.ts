@@ -1,3 +1,5 @@
+#!/usr/bin/env ts-node
+
 import { SerialPort } from 'serialport';
 import server, { MuteStatus } from './server';
 import { Color, parseHexToNumbers } from './colors';

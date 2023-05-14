@@ -7,6 +7,7 @@
     "url": "paullessing.com"
   },
   "scripts": {
+    "build": "rm -rf dist && tsc"
   },
   "dependencies": {
     "serialport": "^11.0.0",
