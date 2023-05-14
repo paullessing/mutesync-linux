@@ -22,6 +22,10 @@ export class WebsocketServer {
     this.muteListeners.add(listener);
   }
 
+  public clearListeners(): void {
+    this.muteListeners.clear();
+  }
+
   public toggleMute(onSuccess?: () => void): void {
     for (const socket of this.connectedSockets) {
       socket.once('muteStatusToggled', () => {

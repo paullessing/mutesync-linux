@@ -8,6 +8,8 @@ const BUTTON_UP = 0x34;
 const Colors = {
   RED: parseHexToNumbers('#ff0000').brightness(0.4),
   GREEN: parseHexToNumbers('#00ff00').brightness(0.4),
+  BLUE: parseHexToNumbers('#0000ff').brightness(0.4),
+  YELLOW: parseHexToNumbers('#ffff00').brightness(0.4),
   BLACK: parseHexToNumbers('#000000'),
 };
 
@@ -22,20 +24,22 @@ const serialPort = new SerialPort({
   path: '/dev/ttyUSB0',
 });
 
-serialPort.on('open', () => {
+server.start();
+
+serialPort.on('open', async () => {
   console.log('Serial port connected');
 
   let currentColor: Color = Colors.BLACK;
   let currentStatus: MuteStatus = 'disabled';
 
-  setInterval(() => {
-    serialPort.write(getColorCommand(currentColor));
-  }, 200);
+  server.clearListeners();
+  await runStartupAnimation();
+
+  setInterval(() => writeColor(currentColor), 200);
 
   server.addMuteListener((status) => {
     setStatus(status);
   });
-  server.start();
 
   serialPort.on('data', (data: Buffer) => {
     if (data[0] === BUTTON_UP) {
@@ -43,12 +47,16 @@ serialPort.on('open', () => {
     }
   });
 
+  function writeColor(color: Color): void {
+    serialPort.write(getColorCommand(color));
+  }
+
   function setStatus(status: MuteStatus) {
     currentStatus = status;
 
     try {
       currentColor = getColorFromStatus(status);
-      serialPort.write(getColorCommand(currentColor));
+      writeColor(currentColor);
     } catch (e) {
       console.error(e);
     }
@@ -95,6 +103,18 @@ serialPort.on('open', () => {
     }
 
     return Buffer.from(data);
+  }
+
+  async function runStartupAnimation() {
+    const sleep = (time: number) =>
+      new Promise((resolve) => setTimeout(resolve, time));
+
+    serialPort.write(getColorCommand(Colors.RED));
+    await sleep(400);
+    serialPort.write(getColorCommand(Colors.YELLOW));
+    await sleep(400);
+    serialPort.write(getColorCommand(Colors.GREEN));
+    await sleep(400);
   }
 });
 
